@@ -1,152 +1,106 @@
+const VERSION = Date.now(); 
+const CACHE_PREFIX = 'pwa-kalkulator';
+const CACHE_NAME = `${CACHE_PREFIX}-v${VERSION}`;
+const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-v${VERSION}`;
 
+const CORE_ASSETS = [
+  '/', 
+  '/index.html',
+  '/styles.css',
+  '/app.js',
+  '/register-sw.js',
+  '/manifest.json',
+  '/icons/kalku.png',
+  '/offline.html'
+];
 
-  const display = document.getElementById("display");
-  let expression = "0";
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(CORE_ASSETS))
+      .then(() => self.skipWaiting())
+  );
+});
 
-  function updateDisplay() {
-    display.innerText = expression;
-    display.scrollTop = display.scrollHeight;
-  }
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.filter(k => k !== CACHE_NAME && !k.includes(VERSION))
+          .map(k => caches.delete(k))
+    )).then(() => self.clients.claim())
+  );
+});
 
-  function appendValue(val) {
-    if (expression === "0" || expression === "Error") {
-      expression = val;
-    } else {
-      expression += val;
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request);
+    const cache = await caches.open(RUNTIME_CACHE);
+    cache.put(request, response.clone());
+    return response;
+  } catch (err) {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    if (request.mode === 'navigate') {
+      return caches.match('/offline.html');
     }
-    updateDisplay();
+    throw err;
   }
-
-  function clearDisplay() {
-    expression = "0";
-    updateDisplay();
-  }
-
-  function backspace() {
-    expression = expression.slice(0, -1) || "0";
-    updateDisplay();
-  }
-
-  function calculateResult() {
-    try {
-      let exp = expression.replace(/×/g, "*").replace(/÷/g, "/");
-      expression = String(eval(exp));
-    } catch {
-      expression = "Error";
-    }
-    updateDisplay();
-  }
-
-  function percent() {
-    try {
-      expression = String(eval(expression.replace(/×/g, "*").replace(/÷/g, "/")) / 100);
-    } catch {
-      expression = "Error";
-    }
-    updateDisplay();
-  }
-
-  function sqrt() {
-    try {
-      let val = eval(expression.replace(/×/g, "*").replace(/÷/g, "/"));
-      expression = String(Math.sqrt(val));
-    } catch {
-      expression = "Error";
-    }
-    updateDisplay();
-  }
-
-  function power() {
-    try {
-      let val = eval(expression.replace(/×/g, "*").replace(/÷/g, "/"));
-      expression = String(val ** 2);
-    } catch {
-      expression = "Error";
-    }
-    updateDisplay();
-  }
-
-  function toggleSign() {
-    try {
-      let val = eval(expression.replace(/×/g, "*").replace(/÷/g, "/"));
-      expression = String(-val);
-    } catch {
-      expression = "Error";
-    }
-    updateDisplay();
-  }
-
-  
-
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-      console.log('Service Worker terdaftar:', reg);
-
-      reg.addEventListener('updatefound', () => {
-        const newSW = reg.installing;
-        if (!newSW) return;
-        newSW.addEventListener('statechange', () => {
-          if (newSW.state === 'installed') {
-            if (navigator.serviceWorker.controller) {
-           
-              console.log('Update tersedia — muat ulang untuk mengaktifkan.');
-            } else {
-              console.log('Aplikasi siap untuk digunakan offline.');
-            }
-          }
-        });
-      });
-
-      setInterval(() => {
-        reg.update().catch(() => {});
-      }, 60 * 60 * 1000);
-
-    } catch (e) {
-      console.error('Pendaftaran service worker gagal:', e);
-    }
-  });
-} else {
-  console.log('Service Worker tidak didukung di browser ini.');
 }
 
- let deferredPrompt;
-  const installBtn = document.getElementById('installBtn');
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    installBtn.style.display = 'block'; 
-  });
-
-  installBtn.addEventListener('click', async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        console.log('PWA berhasil diinstall');
-        installBtn.style.display = 'none'; 
-        deferredPrompt = null;
-      }
-    }
-  });
-
-  window.addEventListener('appinstalled', () => {
-    console.log('PWA sudah diinstall');
-    installBtn.style.display = 'none';
-    deferredPrompt = null;
-  });
-
-  function isInStandaloneMode() {
-  return (window.matchMedia('(display-mode: standalone)').matches) ||
-         (window.navigator.standalone === true);
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  const cache = await caches.open(RUNTIME_CACHE);
+  cache.put(request, response.clone());
+  return response;
 }
 
-window.addEventListener('load', () => {
-  const installBtn = document.getElementById('installBtn');
-  if (isInStandaloneMode()) {
-    installBtn.style.display = 'none';
+self.addEventListener('fetch', event => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  if (request.method !== 'GET') return;
+
+  if (url.pathname.startsWith('/api/') || url.search.includes('api=')) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request).catch(() => caches.match('/offline.html')));
+    return;
+  }
+
+  if (request.destination === 'image' || /\.(png|jpg|jpeg|gif|webp|svg)$/.test(url.pathname)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(RUNTIME_CACHE);
+      const cached = await cache.match(request);
+      const networkPromise = fetch(request).then(networkResponse => {
+        cache.put(request, networkResponse.clone());
+        return networkResponse;
+      }).catch(() => null);
+      return cached || networkPromise || caches.match('/icons/kalku.png');
+    })());
+    return;
+  }
+
+  if (request.destination === 'style' || request.destination === 'script' || request.destination === 'font' ||
+      /\.(css|js|woff2?|ttf|eot)$/.test(url.pathname)) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then(res => res || fetch(request).catch(() => {
+      if (request.mode === 'navigate') return caches.match('/offline.html');
+    }))
+  );
+});
+
+self.addEventListener('message', event => {
+  if (!event.data) return;
+  if (event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
