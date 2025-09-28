@@ -1,0 +1,88 @@
+ 
+    body {
+      background: linear-gradient(135deg, #1f1c2c, #928dab);
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .calculator {
+      backdrop-filter: blur(10px);
+      background: rgba(255,255,255,0.1);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      width: 340px;
+      padding: 20px;
+    }
+.display {
+  background: rgba(0,0,0,0.85);
+  color: #0f0;
+  font-size: 2em;
+  text-align: right;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+
+  
+  max-height: 120px;     
+  overflow-y: auto;        
+  word-wrap: break-word;   
+  white-space: normal;    
+}
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+    button {
+      padding: 18px;
+      font-size: 1.2em;
+      border: none;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      transition: transform 0.1s;
+    }
+    button:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    button:active {
+      transform: scale(0.95);
+    }
+    .operator { background: #ff9f43; }
+    .equal { background: #2ecc71; grid-column: span 2; }
+    .clear { background: #e74c3c; }
+
+   /* Default: tombol tidak kelihatan */
+#installBtn {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #007bff;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 999;
+}
+
+/* Kalau dibuka di browser (bukan standalone/PWA), boleh tampilkan */
+@media all and (display-mode: browser) {
+  #installBtn {
+    display: block;
+  }
+}
+
+/* Kalau sudah jadi PWA (standalone/fullscreen/minimal-ui), tombol tetap hidden */
+@media all and (display-mode: standalone),
+       all and (display-mode: fullscreen),
+       all and (display-mode: minimal-ui) {
+  #installBtn {
+    display: none !important;
+  }
+}
